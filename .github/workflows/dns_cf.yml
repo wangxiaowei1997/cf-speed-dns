@@ -8,6 +8,7 @@ on: workflow_dispatch
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: default
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v3
