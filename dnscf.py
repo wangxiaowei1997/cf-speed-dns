@@ -7,11 +7,8 @@ import json
 # API 密钥
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 CF_ZONE_ID = os.environ["CF_ZONE_ID"]
-CF_DNS_NAMES = os.environ["CF_DNS_NAMES"]
+CF_DNS_NAMES = [name.strip() for name in os.environ["CF_DNS_NAMES"].split(',')]
 
-
-# pushplus_token
-# PUSHPLUS_TOKEN = os.environ["PUSHPLUS_TOKEN"]
 
 headers = {
     'Authorization': f'Bearer {CF_API_TOKEN}',
@@ -31,18 +28,12 @@ def get_cf_speed_test_ip(timeout=10, max_retries=5):
 
 
 def get_dns_records(name):
-    def_info = []
     url = f'https://api.cloudflare.com/client/v4/zones/{CF_ZONE_ID}/dns_records'
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
-        records = response.json()['result']
-        for record in records:
-            if record['name'] == name:
-                def_info.append(record['id'])
-        return def_info
-    else:
-        print(f'Error fetching DNS records for {name}:', response.text)
-        return []
+        return [record['id'] for record in response.json()['result'] if record['name'] == name]
+    print(f'Error fetching DNS records for {name}:', response.text)
+    return []
 
 
 def update_dns_record(record_id, name, cf_ip):
@@ -55,33 +46,13 @@ def update_dns_record(record_id, name, cf_ip):
     try:
         response = requests.put(url, headers=headers, json=data)
         if response.status_code == 200:
-            msg = f"成功更新 {name} 的DNS记录为 {cf_ip}"
-            print(f"[SUCCESS] {msg} - {time.strftime('%Y-%m-%d %H:%M:%S')}")
-            return msg
-        else:
-            msg = f"更新 {name} 失败，状态码：{response.status_code}"
-            print(f"[ERROR] {msg} - {time.strftime('%Y-%m-%d %H:%M:%S')}")
-            return msg
+            return f"成功更新 {name} → {cf_ip}"
+        return f"更新 {name} 失败，状态码：{response.status_code}"
     except Exception as e:
         traceback.print_exc()
-        msg = f"更新 {name} 时发生异常：{str(e)}"
-        return msg
+        return f"更新 {name} 异常：{str(e)}"
 
 
-def push_plus(content):
-    url = 'http://www.pushplus.plus/send'
-    data = {
-        "token": 'PUSHPLUS_TOKEN',
-        "title": "IP优选DNSCF推送",
-        "content": content,
-        "template": "markdown",
-        "channel": "wechat"
-    }
-    try:
-        response = requests.post(url, json=data)
-        print(f"推送状态：{response.status_code}")
-    except Exception as e:
-        print(f"推送失败：{str(e)}")
 
 
 def main():
@@ -91,26 +62,38 @@ def main():
         return
 
     ip_addresses = ip_addresses_str.split(',')
-    cf_dns_list = [name.strip() for name in CF_DNS_NAMES.split(',')]
-    results = []
+    domain_records = {}
+    total_required = 0
 
-    for dns_name in cf_dns_list:
-        record_ids = get_dns_records(dns_name)
-        if not record_ids:
-            results.append(f"{dns_name}: 未找到DNS记录")
+    # 获取所有域名的DNS记录并计算总需求
+    for domain in CF_DNS_NAMES:
+        records = get_dns_records(domain)
+        if not records:
+            print(f"跳过 {domain}（无DNS记录）")
             continue
+        domain_records[domain] = records
+        total_required += len(records)
 
-        min_length = min(len(record_ids), len(ip_addresses))
-        for i in range(min_length):
-            result = update_dns_record(record_ids[i], dns_name, ip_addresses[i])
-            results.append(f"{dns_name}: {result}")
+    # 检查IP数量是否足够
+    if len(ip_addresses) < total_required:
+        msg = f"需要 {total_required} 个IP，但只获取到 {len(ip_addresses)} 个"
+        print(msg)
+        return
 
-        if len(record_ids) < len(ip_addresses):
-            results.append(f"{dns_name}: IP地址数量({len(ip_addresses)})多于DNS记录数量({len(record_ids)})")
+    # 分配IP并更新记录
+    ip_cursor = 0
+    results = []
+    for domain, records in domain_records.items():
+        required = len(records)
+        assigned_ips = ip_addresses[ip_cursor: ip_cursor + required]
+        ip_cursor += required
+
+        for i, record_id in enumerate(records):
+            result = update_dns_record(record_id, domain, assigned_ips[i])
+            results.append(f"{domain}：{result}")
 
     if results:
-        print('success !')
-        # push_plus("\n".join(results))
+        print("\n".join(results))
 
 
 if __name__ == '__main__':
