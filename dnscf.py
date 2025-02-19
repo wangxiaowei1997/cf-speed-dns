@@ -7,7 +7,7 @@ import json
 # API 密钥
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 CF_ZONE_ID = os.environ["CF_ZONE_ID"]
-CF_DNS_NAMES = [name.strip() for name in os.environ["CF_DNS_NAMES"].split(',')]
+CF_DNS_NAMES = os.environ["CF_DNS_NAMES"]
 
 
 headers = {
@@ -66,7 +66,8 @@ def main():
     total_required = 0
 
     # 获取所有域名的DNS记录并计算总需求
-    for domain in CF_DNS_NAMES:
+    cf_dns_names_list = [name.strip() for name in CF_DNS_NAMES.split(',')]
+    for domain in cf_dns_names_list:
         records = get_dns_records(domain)
         if not records:
             print(f"跳过 {domain}（无DNS记录）")
