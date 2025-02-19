@@ -71,7 +71,7 @@ def update_dns_record(record_id, name, cf_ip):
 def push_plus(content):
     url = 'http://www.pushplus.plus/send'
     data = {
-        "token": PUSHPLUS_TOKEN,
+        "token": 'PUSHPLUS_TOKEN',
         "title": "IP优选DNSCF推送",
         "content": content,
         "template": "markdown",
